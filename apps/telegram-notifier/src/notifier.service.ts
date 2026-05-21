@@ -39,7 +39,16 @@ export class NotifierService implements OnModuleInit {
   }
 
   private async handleMessage(msg: ConsumeMessage): Promise<void> {
-    const event = JSON.parse(msg.content.toString()) as EventMessage;
+    let event: EventMessage;
+    try {
+      event = JSON.parse(msg.content.toString()) as EventMessage;
+    } catch (error) {
+      this.logger.error(
+        `Invalid message payload at notifier: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await this.routeInvalidMessage(msg, error);
+      return;
+    }
     const dedupKey = `${RedisKeys.notifierDedup}:${event.eventId}`;
 
     if (await this.redisService.exists(dedupKey)) {
@@ -75,25 +84,56 @@ export class NotifierService implements OnModuleInit {
     msg: ConsumeMessage,
     error: unknown,
   ): Promise<void> {
-    const attempt = (event.attempt ?? 0) + 1;
-    const failedEvent: EventMessage = { ...event, attempt };
+    try {
+      const attempt = (event.attempt ?? 0) + 1;
+      const failedEvent: EventMessage = { ...event, attempt };
 
-    if (attempt <= RabbitTopology.notifyRetryQueues.length) {
-      const retryQueue = RabbitTopology.notifyRetryQueues[attempt - 1];
-      await this.rabbitService.sendToQueue(retryQueue, failedEvent);
-      this.logger.warn(
-        `Notifier retry ${attempt} scheduled for ${event.eventId} -> ${retryQueue}`,
-      );
-    } else {
-      await this.rabbitService.sendToQueue(
-        RabbitTopology.notifyDlq,
-        failedEvent,
-      );
+      if (attempt <= RabbitTopology.notifyRetryQueues.length) {
+        const retryQueue = RabbitTopology.notifyRetryQueues[attempt - 1];
+        await this.rabbitService.sendToQueue(retryQueue, failedEvent);
+        this.logger.warn(
+          `Notifier retry ${attempt} scheduled for ${event.eventId} -> ${retryQueue}`,
+        );
+      } else {
+        await this.rabbitService.sendToQueue(
+          RabbitTopology.notifyDlq,
+          failedEvent,
+        );
+        this.logger.error(
+          `Notifier moved event ${event.eventId} to DLQ: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      await this.rabbitService.ack(msg);
+    } catch (routeError) {
       this.logger.error(
-        `Notifier moved event ${event.eventId} to DLQ: ${error instanceof Error ? error.message : String(error)}`,
+        `Notifier failed to route ${event.eventId} to retry/DLQ: ${
+          routeError instanceof Error ? routeError.message : String(routeError)
+        }`,
       );
+      await this.rabbitService.nack(msg, true);
     }
+  }
 
-    await this.rabbitService.ack(msg);
+  private async routeInvalidMessage(
+    msg: ConsumeMessage,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      await this.rabbitService.sendToQueue(RabbitTopology.notifyDlq, {
+        reason: 'INVALID_JSON',
+        error: error instanceof Error ? error.message : String(error),
+        raw: msg.content.toString(),
+        receivedAt: new Date().toISOString(),
+      });
+      await this.rabbitService.ack(msg);
+    } catch (routeError) {
+      this.logger.error(
+        `Notifier failed to route invalid payload to DLQ: ${
+          routeError instanceof Error ? routeError.message : String(routeError)
+        }`,
+      );
+      await this.rabbitService.nack(msg, true);
+    }
   }
 }

@@ -47,4 +47,22 @@ describe('Producer API module integration (e2e-like)', () => {
 
     expect(() => guard.canActivate(context)).toThrow(UnauthorizedException);
   });
+
+  it('accepts valid x-api-key', async () => {
+    process.env.API_KEY = 'test-key';
+
+    const moduleFixture = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    const guard = moduleFixture.get(ApiKeyGuard);
+
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({ headers: { 'x-api-key': 'test-key' } }),
+      }),
+    } as ExecutionContext;
+
+    expect(guard.canActivate(context)).toBe(true);
+  });
 });

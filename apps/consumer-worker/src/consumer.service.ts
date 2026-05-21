@@ -33,7 +33,17 @@ export class ConsumerService implements OnModuleInit {
   }
 
   private async handleMessage(msg: ConsumeMessage): Promise<void> {
-    const event = JSON.parse(msg.content.toString()) as EventMessage;
+    let event: EventMessage;
+    try {
+      event = JSON.parse(msg.content.toString()) as EventMessage;
+    } catch (error) {
+      this.logger.error(
+        `Invalid message payload at consumer: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      await this.routeInvalidMessage(msg, error);
+      return;
+    }
+
     const dedupKey = `${RedisKeys.consumerDedup}:${event.eventId}`;
 
     if (await this.redisService.exists(dedupKey)) {
@@ -66,25 +76,56 @@ export class ConsumerService implements OnModuleInit {
     msg: ConsumeMessage,
     error: unknown,
   ): Promise<void> {
-    const attempt = (event.attempt ?? 0) + 1;
-    const failedEvent: EventMessage = { ...event, attempt };
+    try {
+      const attempt = (event.attempt ?? 0) + 1;
+      const failedEvent: EventMessage = { ...event, attempt };
 
-    if (attempt <= RabbitTopology.ingestRetryQueues.length) {
-      const retryQueue = RabbitTopology.ingestRetryQueues[attempt - 1];
-      await this.rabbitService.sendToQueue(retryQueue, failedEvent);
-      this.logger.warn(
-        `Consumer retry ${attempt} scheduled for ${event.eventId} -> ${retryQueue}`,
-      );
-    } else {
-      await this.rabbitService.sendToQueue(
-        RabbitTopology.ingestDlq,
-        failedEvent,
-      );
+      if (attempt <= RabbitTopology.ingestRetryQueues.length) {
+        const retryQueue = RabbitTopology.ingestRetryQueues[attempt - 1];
+        await this.rabbitService.sendToQueue(retryQueue, failedEvent);
+        this.logger.warn(
+          `Consumer retry ${attempt} scheduled for ${event.eventId} -> ${retryQueue}`,
+        );
+      } else {
+        await this.rabbitService.sendToQueue(
+          RabbitTopology.ingestDlq,
+          failedEvent,
+        );
+        this.logger.error(
+          `Consumer moved event ${event.eventId} to DLQ: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      await this.rabbitService.ack(msg);
+    } catch (routeError) {
       this.logger.error(
-        `Consumer moved event ${event.eventId} to DLQ: ${error instanceof Error ? error.message : String(error)}`,
+        `Consumer failed to route ${event.eventId} to retry/DLQ: ${
+          routeError instanceof Error ? routeError.message : String(routeError)
+        }`,
       );
+      await this.rabbitService.nack(msg, true);
     }
+  }
 
-    await this.rabbitService.ack(msg);
+  private async routeInvalidMessage(
+    msg: ConsumeMessage,
+    error: unknown,
+  ): Promise<void> {
+    try {
+      await this.rabbitService.sendToQueue(RabbitTopology.ingestDlq, {
+        reason: 'INVALID_JSON',
+        error: error instanceof Error ? error.message : String(error),
+        raw: msg.content.toString(),
+        receivedAt: new Date().toISOString(),
+      });
+      await this.rabbitService.ack(msg);
+    } catch (routeError) {
+      this.logger.error(
+        `Consumer failed to route invalid payload to DLQ: ${
+          routeError instanceof Error ? routeError.message : String(routeError)
+        }`,
+      );
+      await this.rabbitService.nack(msg, true);
+    }
   }
 }

@@ -76,17 +76,26 @@ export class RabbitService implements OnModuleDestroy {
     handler: (msg: ConsumeMessage) => Promise<void>,
   ): Promise<void> {
     const channel = await this.getChannel();
+    const prefetch = Number(this.configService.get<number>('rabbitPrefetch') ?? 10);
+    if (Number.isFinite(prefetch) && prefetch > 0) {
+      await channel.prefetch(prefetch);
+    }
     await channel.consume(queue, (msg) => {
       if (!msg) {
         return;
       }
       void handler(msg);
-    });
+    }, { noAck: false });
   }
 
   async ack(msg: ConsumeMessage): Promise<void> {
     const channel = await this.getChannel();
     channel.ack(msg);
+  }
+
+  async nack(msg: ConsumeMessage, requeue = true): Promise<void> {
+    const channel = await this.getChannel();
+    channel.nack(msg, false, requeue);
   }
 
   async sendToQueue(queue: string, payload: object): Promise<void> {

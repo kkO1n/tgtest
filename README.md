@@ -15,7 +15,7 @@ Flow:
 Reliability:
 
 - At-least-once delivery.
-- Manual ACK after successful processing.
+- Manual ACK: after successful processing and after successful reroute to retry/DLQ.
 - 3 retry queues with exponential delays (5s, 30s, 120s).
 - DLQ for messages that exceed retry attempts.
 - Event idempotency via Redis (`dedup:consumer:{eventId}`, `dedup:notifier:{eventId}`).

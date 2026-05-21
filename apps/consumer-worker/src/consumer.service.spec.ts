@@ -17,6 +17,7 @@ describe('ConsumerService', () => {
       [string, (msg: ConsumeMessage) => Promise<void>]
     >(),
     ack: jest.fn<Promise<void>, [ConsumeMessage]>(),
+    nack: jest.fn<Promise<void>, [ConsumeMessage, boolean?]>(),
     sendToQueue: jest.fn<Promise<void>, [string, object]>(),
     publishWithConfirm: jest.fn<Promise<void>, [string, string, object]>(),
   };
@@ -43,6 +44,7 @@ describe('ConsumerService', () => {
     jest.clearAllMocks();
     rabbit.consume.mockResolvedValue(undefined);
     rabbit.ack.mockResolvedValue(undefined);
+    rabbit.nack.mockResolvedValue(undefined);
     rabbit.sendToQueue.mockResolvedValue(undefined);
     rabbit.publishWithConfirm.mockResolvedValue(undefined);
     redis.setIfNotExists.mockResolvedValue(true);
@@ -299,5 +301,33 @@ describe('ConsumerService', () => {
     expect(logger.log).toHaveBeenCalledWith(
       expect.stringContaining('Consumer processed event: retry-cycle-1'),
     );
+  });
+
+  it('routes invalid json to DLQ and acks original message', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        ConsumerService,
+        { provide: AppLoggerService, useValue: logger },
+        { provide: RabbitService, useValue: rabbit },
+        { provide: RedisService, useValue: redis },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue(60) },
+        },
+      ],
+    }).compile();
+
+    const service = moduleRef.get(ConsumerService);
+    await service.onModuleInit();
+    const handler = getRegisteredHandler();
+    const msg = { content: Buffer.from('{bad-json') } as ConsumeMessage;
+
+    await handler(msg);
+
+    expect(rabbit.sendToQueue).toHaveBeenCalledWith(
+      'events.ingest.dlq',
+      expect.objectContaining({ reason: 'INVALID_JSON' }),
+    );
+    expect(rabbit.ack).toHaveBeenCalledWith(msg);
   });
 });
