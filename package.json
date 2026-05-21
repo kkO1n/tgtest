@@ -10,6 +10,7 @@
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start producer-api",
     "start:dev": "nest start producer-api --watch",
+    "start:all": "bash -lc 'npm run start:dev:producer & npm run start:dev:consumer & npm run start:dev:notifier & wait'",
     "start:dev:producer": "nest start producer-api --watch",
     "start:dev:consumer": "nest start consumer-worker --watch",
     "start:dev:notifier": "nest start telegram-notifier --watch",

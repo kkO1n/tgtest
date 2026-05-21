@@ -49,23 +49,25 @@ Response `202`:
 
 Swagger: `http://localhost:3000/docs`
 
-## Local run
+## Local Run
 
 ```bash
 npm install
+cp .env.example .env
+docker compose up -d
 npm run build
-npm run start:dev:producer
-npm run start:dev:consumer
-npm run start:dev:notifier
+npm run start:all
 ```
 
-## Docker
+Infra services in Docker:
 
 ```bash
-docker compose up --build
+docker compose up -d
 ```
 
-Producer API is available at `http://localhost:3000`.
+RabbitMQ UI is available at `http://localhost:15672` (`guest/guest`).
+Redis is available at `localhost:6380`.
+Producer API is available locally at `http://localhost:3000`.
 
 ## Tests
 

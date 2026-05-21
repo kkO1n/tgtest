@@ -13,47 +13,4 @@ services:
     image: redis:7-alpine
     hostname: redis
     ports:
-      - "6379:6379"
-
-  producer-api:
-    build:
-      context: .
-      dockerfile: Dockerfile.producer
-    depends_on:
-      - rabbitmq
-      - redis
-    environment:
-      SERVICE_NAME: producer-api
-      PORT: 3000
-      API_KEY: changeme
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
-    ports:
-      - "3000:3000"
-
-  consumer-worker:
-    build:
-      context: .
-      dockerfile: Dockerfile.consumer
-    depends_on:
-      - rabbitmq
-      - redis
-    environment:
-      SERVICE_NAME: consumer-worker
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
-      DEDUP_TTL_SECONDS: 604800
-
-  telegram-notifier:
-    build:
-      context: .
-      dockerfile: Dockerfile.notifier
-    depends_on:
-      - rabbitmq
-      - redis
-    environment:
-      SERVICE_NAME: telegram-notifier
-      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672
-      REDIS_URL: redis://redis:6379
-      DEDUP_TTL_SECONDS: 604800
-      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      - "6380:6379"
