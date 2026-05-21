@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "monorepo": true,
+  "root": "apps/producer-api",
+  "sourceRoot": "apps/producer-api/src",
+  "compilerOptions": {
+    "webpack": false,
+    "tsConfigPath": "apps/producer-api/tsconfig.app.json",
+    "deleteOutDir": true
+  },
+  "projects": {
+    "producer-api": {
+      "type": "application",
+      "root": "apps/producer-api",
+      "entryFile": "main",
+      "sourceRoot": "apps/producer-api/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/producer-api/tsconfig.app.json"
+      }
+    },
+    "consumer-worker": {
+      "type": "application",
+      "root": "apps/consumer-worker",
+      "entryFile": "main",
+      "sourceRoot": "apps/consumer-worker/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/consumer-worker/tsconfig.app.json"
+      }
+    },
+    "telegram-notifier": {
+      "type": "application",
+      "root": "apps/telegram-notifier",
+      "entryFile": "main",
+      "sourceRoot": "apps/telegram-notifier/src",
+      "compilerOptions": {
+        "tsConfigPath": "apps/telegram-notifier/tsconfig.app.json"
+      }
+    }
+  }
+}
